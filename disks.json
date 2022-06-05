@@ -1,0 +1,11 @@
+[
+	{"name": "disk 1", "mount_directory": "0", "ID_SERIAL": "ST18000N_M000J-2TV103_A25269D4-0:0"},
+	{"name": "disk 2", "mount_directory": "0", "ID_SERIAL": "ST4000VM_000-1F3168_330088A5-0:0"},
+	{"name": "disk 3", "mount_directory": "0", "ID_SERIAL": "WDC_WD80_01FFWX-68J1UN0_6B11EC99-0:0"},
+	{"name": "disk 4", "mount_directory": "0", "ID_SERIAL": "ST8000NM_0055-1RM112_A1101478-0:0"},
+	{"name": "disk 5", "mount_directory": "0", "ID_SERIAL": "ST8000AS_0002-1NA17Z_A8409457-0:0"},
+	{"name": "disk 6", "mount_directory": "0", "ID_SERIAL": "ST6000VN_001-2BB186_A210E884-0:0"},
+	{"name": "disk 7", "mount_directory": "0", "ID_SERIAL": "TOSHIBA_HDWE160_11C4B2566287-0:0"},
+	{"name": "disk 8", "mount_directory": "0", "ID_SERIAL": "ST4000DM_004-2CV104_76E54622-0:0"},
+	{"name": "disk 9", "mount_directory": "0", "ID_SERIAL": "WDC_WD80_01FFWX-68J1UN0_267D4329-0:0"}
+]

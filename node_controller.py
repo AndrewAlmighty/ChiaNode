@@ -5,21 +5,34 @@ from sh import mount
 from sh import umount
 from urllib.request import urlopen
 
+import glob
 import json
 import os
+import requests
 import signal
-import subprocess
 import time
 
-THREAD_SLEEP_IN_SECONDS = 60
+# GLOBAL VARIABLES SECTION
+
+THREAD_SLEEP_IN_SECONDS = 10
 DISKS_JSON_FILE_PATH = "disks.json"
+
+RPC_REQUEST_HEADERS = {'Content-Type': 'application/json'}
+BLOCKCHAIN_STATE_URL = "https://localhost:8555/get_blockchain_state"
+CHIA_ROOT_DIR = os.getenv("CHIA_ROOT")  # shouldn't have '/' in the end.
+FULL_NODE_CERT = (CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.crt', CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.key')
 
 CONTROLLER_ENABLED = True
 NETWORK_WORKS = True
+NODE_SYNCED = True
 
+# END OF GLOBAL VARIABLES SECTION
+
+# Signals handlers
 def handleSigInt(signalNumber, frame):
     global CONTROLLER_ENABLED
     CONTROLLER_ENABLED = False
+
 
 class Logger:
 
@@ -116,6 +129,10 @@ class Controller:
     def __umount_disk(self, disk_id, mount_point):
         self.disks_mapping[disk_id]["is_mounted"] = False
 
+        if not os.path.isdir(mount_point):
+            self.logger.controller_log("Unounting " + disk_id + " to " + mount_point + " failed. Mount point doesn't exists")
+            return
+
         try:
             mounted_filesystems_json = json.loads(str(findmnt(mount_point, "-J")))
             filesystems_mounted_count = len(mounted_filesystems_json["filesystems"])
@@ -128,6 +145,16 @@ class Controller:
     # - end of umount disk impl
 
     def __mount_disk(self, disk_id, mount_point):
+        if not os.path.isdir(mount_point):
+            self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed. Mount point doesn't exists")
+            return
+            
+        try:
+            ls("/dev/disk/by-uuid/" + disk_id)
+        except:
+            self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed. Disk is not connected!")
+            return
+
         try:
             ls("/dev/disk/by-uuid/" + disk_id)
         except:
@@ -136,8 +163,9 @@ class Controller:
 
         try:
             mount("UUID="+ disk_id, mount_point)
-            self.logger.controller_log("Mounted " + disk_id + ". Mount point: " + mount_point)
             self.disks_mapping[disk_id]["is_mounted"] = True
+            plots_count = len(glob.glob1(mount_point, "*.plot"))
+            self.logger.controller_log("Mounted " + disk_id + ". Mount point: " + mount_point + ". Plots count: " + str(plots_count))
         except:
             self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed.")
 
@@ -173,6 +201,27 @@ class Controller:
     
     # - end of check network impl
 
+    def __check_blockchain_sync(self):
+        try:
+            response = json.loads(requests.post(BLOCKCHAIN_STATE_URL, data='{}', headers=RPC_REQUEST_HEADERS, cert=FULL_NODE_CERT, verify=False).text)
+            is_synced = response["blockchain_state"]["sync"]["synced"]
+            global NODE_SYNCED
+
+            if not is_synced and NODE_SYNCED:
+                self.logger.controller_log("Node is not synchronized with blockchain.")
+                NODE_SYNCED = False
+            elif is_synced and not NODE_SYNCED:
+                NODE_SYNCED = True
+                self.logger.controller_log("Node is synchronized with blockchain.")
+        except requests.ConnectionError as error:
+            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Connection error: " + str(error))
+        except requests.HTTPError as error:
+            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Http error: " + str(error))
+        except:
+            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. (Not known error)")
+
+    # - end of check blockchain sync impl
+
     def run(self):
         global CONTROLLER_ENABLED
         global THREAD_SLEEP_IN_SECONDS
@@ -180,6 +229,7 @@ class Controller:
             self.__load_disks_mapping()
             self.__check_mount_points()
             self.__check_network()
+            self.__check_blockchain_sync()
             time.sleep(THREAD_SLEEP_IN_SECONDS)
 
 # --- END OF CONTROLLER

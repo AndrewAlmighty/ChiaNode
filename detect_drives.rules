@@ -1,2 +1,0 @@
-SUBSYSTEM=="block", ATTRS{idVendor}=="2109", ATTRS{idProduct}=="0711", ACTION=="add", RUN+="/home/someone/trigger.sh '%E{ID_VENDOR_ID}' '%E{ID_MODEL_ID}'", ENV{DEVTYPE}=="disk"
-SUBSYSTEM=="block", ATTRS{idVendor}=="2109", ATTRS{idProduct}=="0711", ACTION=="remove", RUN+="/home/someone/trigger2.sh", ENV{DEVTYPE}=="disk"

@@ -1,8 +1,5 @@
 from datetime import datetime
-from sh import findmnt
-from sh import ls
-from sh import mount
-from sh import umount
+from sh import findmnt, ls, mount, umount, pgrep
 from urllib.request import urlopen
 
 import glob
@@ -10,36 +7,48 @@ import json
 import os
 import requests
 import signal
+import subprocess
 import time
 
 # GLOBAL VARIABLES SECTION
+BREAK_BETWEEN_JOBS_IN_SECONDS = 300
 
-THREAD_SLEEP_IN_SECONDS = 10
-DISKS_JSON_FILE_PATH = "disks.json"
+CONTROLLER_LOG_PATH="/root/controller.log"
+DISKS_JSON_FILE_PATH = "/root/controller/disks.json"
 
 RPC_REQUEST_HEADERS = {'Content-Type': 'application/json'}
 BLOCKCHAIN_STATE_URL = "https://localhost:8555/get_blockchain_state"
 CHIA_ROOT_DIR = os.getenv("CHIA_ROOT")  # shouldn't have '/' in the end.
 FULL_NODE_CERT = (CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.crt', CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.key')
 
+CHIA_NODE_PROCESS_NAME = "chia_full_node"
+PATH_TO_RUN_CHIA_SCRIPT = "/root/controller/chia_full_node.sh"
+
 CONTROLLER_ENABLED = True
 NETWORK_WORKS = True
 NODE_SYNCED = True
+CHIA_NODE_ENABLED = True
 
 # END OF GLOBAL VARIABLES SECTION
 
-# Signals handlers
+# SIGNAL HANDLERS
+
 def handleSigInt(signalNumber, frame):
     global CONTROLLER_ENABLED
     CONTROLLER_ENABLED = False
 
+def handleSigTerm(signalNumber, frame):
+    global CONTROLLER_ENABLED
+    CONTROLLER_ENABLED = False
+
+# END OF SIGNALS HANDLERS
 
 class Logger:
 
-    def __init__(self, wallet_log_path, controller_log_path):
-        self.wallet_log_path = wallet_log_path
+    def __init__(self, controller_log_path):
+        #self.wallet_log_path = wallet_log_path
         self.controller_log_path = controller_log_path
-        self.wallet_log("Controller started work")
+        #self.wallet_log("Controller started work")
         self.controller_log("Controller started work")
         print("Logger prepared ...")
 
@@ -50,30 +59,15 @@ class Logger:
         log_file.write("[" + dt_string + "]: " + log + "\n")
         log_file.close()
         
-    def wallet_log(self, log):
-        wallet_log_file = open(self.wallet_log_path, "a")
-        self.__log(self.wallet_log_path, log)
+    #def wallet_log(self, log):
+    #    wallet_log_file = open(self.wallet_log_path, "a")
+    #    self.__log(self.wallet_log_path, log)
 
     def controller_log(self, log):
-        wallet_log_file = open(self.wallet_log_path, "a")
+        #wallet_log_file = open(self.wallet_log_path, "a")
         self.__log(self.controller_log_path, log)
 
 # --- END OF LOGGER
-
-class LedCtrl:
-    def __init__(self):
-        pass
-
-    def __turn_on(self):
-        pass
-
-    def __turn_off(self):
-        pass
-
-    def check_flags(self):
-       pass
-
-# --- END OF LED CONTROLLER
 
 class Controller:
 
@@ -81,7 +75,7 @@ class Controller:
     disks_mapping = {}
 
     def __init__(self, disks_mapping_file):
-        self.logger = Logger("wallet.log", "controller.log")
+        self.logger = Logger(CONTROLLER_LOG_PATH)
         self.disks_mapping_file = disks_mapping_file
 
     def __load_disks_mapping(self):
@@ -130,13 +124,21 @@ class Controller:
         self.disks_mapping[disk_id]["is_mounted"] = False
 
         if not os.path.isdir(mount_point):
-            self.logger.controller_log("Unounting " + disk_id + " to " + mount_point + " failed. Mount point doesn't exists")
+            self.logger.controller_log("Unmounting " + mount_point + " failed. Mount point doesn't exists")
+            return
+
+        mounted_filesystems = ""
+
+        try:
+            mounted_filesystems = str(findmnt(mount_point, "-J"))
+        except:
+            self.logger.controller_log("No filesystems mounted on " + mount_point)
             return
 
         try:
-            mounted_filesystems_json = json.loads(str(findmnt(mount_point, "-J")))
+            mounted_filesystems_json = json.loads(mounted_filesystems)
             filesystems_mounted_count = len(mounted_filesystems_json["filesystems"])
-            self.logger.controller_log("Unmounting + " + mount_point + ". Found " + str(filesystems_mounted_count) + " filesystems mounted there.")
+            self.logger.controller_log("Unmounting " + mount_point + ". Found " + str(filesystems_mounted_count) + " filesystems mounted there.")
             for i in range(0, filesystems_mounted_count):
               umount(mount_point)
         except:
@@ -222,19 +224,50 @@ class Controller:
 
     # - end of check blockchain sync impl
 
+    def __is_process_alive(self):
+        global CHIA_NODE_ENABLED
+        try:
+            pgrep(CHIA_NODE_PROCESS_NAME)
+            if not CHIA_NODE_ENABLED:
+                CHIA_NODE_ENABLED = True
+                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " process works again.")
+        except:
+            if CHIA_NODE_ENABLED:
+                CHIA_NODE_ENABLED = False
+                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
+                try:
+                    output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT + " start", shell=True)
+                    self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " restarted. Output:\n" + str(output))
+                    time.sleep(30) #let's wait a little to let process be ready to work.
+                except subprocess.CalledProcessError as error:
+                    self.logger.controller_log("Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
+
+    # - end of is_process_alive
+
     def run(self):
         global CONTROLLER_ENABLED
         global THREAD_SLEEP_IN_SECONDS
+        last_time = 0
         while CONTROLLER_ENABLED:
-            self.__load_disks_mapping()
-            self.__check_mount_points()
-            self.__check_network()
-            self.__check_blockchain_sync()
-            time.sleep(THREAD_SLEEP_IN_SECONDS)
+            now = time.time()
+            if now - last_time > BREAK_BETWEEN_JOBS_IN_SECONDS:
+                self.__is_process_alive()
+                self.__load_disks_mapping()
+                self.__check_mount_points()
+                self.__check_network()
+                self.__check_blockchain_sync()
+                last_time = time.time()
+            time.sleep(10)
+
+        self.logger.controller_log("Stopping " + CHIA_NODE_PROCESS_NAME + " ...")
+        output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT, shell=True)
+        self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped. Output:\n" + str(output))
+        self.logger.controller_log("Controller is stopped with sigint or sigterm")
 
 # --- END OF CONTROLLER
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handleSigInt)
+    signal.signal(signal.SIGTERM, handleSigTerm)
     controller = Controller(DISKS_JSON_FILE_PATH)
     controller.run()

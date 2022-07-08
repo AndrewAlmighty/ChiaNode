@@ -1,0 +1,9 @@
+[Unit]
+Description=Chia node controller
+
+[Service]
+Environment="CHIA_ROOT=dddddddddddddddddddddddddddddddddd"
+ExecStart=python /root/controller/node_controller.py 
+
+[Install]
+WantedBy=default.target

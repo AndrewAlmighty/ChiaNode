@@ -1,2 +1,2 @@
-To generate proto files:
-python -m grpc_tools.protoc -I . --python_out=gen/ --grpc_python_out=gen/ controller.proto
+Specify CHIA_ROOT in /etc/environment
+Specify CHIA_ROOT in systemd service.

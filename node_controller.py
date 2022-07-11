@@ -1,4 +1,5 @@
 from datetime import datetime
+from gpiozero import LED
 from sh import findmnt, ls, mount, umount, pgrep
 from urllib.request import urlopen
 
@@ -11,10 +12,12 @@ import subprocess
 import time
 
 # GLOBAL VARIABLES SECTION
-BREAK_BETWEEN_JOBS_IN_SECONDS = 300
+LED_CTRL = LED(17)
 
-CONTROLLER_LOG_PATH="/root/controller.log"
-DISKS_JSON_FILE_PATH = "/root/controller/disks.json"
+BREAK_BETWEEN_JOBS_IN_SECONDS = 180
+
+CONTROLLER_LOG_PATH="/home/raspberry/controller.log"
+DISKS_JSON_FILE_PATH = "/home/raspberry/controller/disks.json"
 
 RPC_REQUEST_HEADERS = {'Content-Type': 'application/json'}
 BLOCKCHAIN_STATE_URL = "https://localhost:8555/get_blockchain_state"
@@ -22,9 +25,10 @@ CHIA_ROOT_DIR = os.getenv("CHIA_ROOT")  # shouldn't have '/' in the end.
 FULL_NODE_CERT = (CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.crt', CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.key')
 
 CHIA_NODE_PROCESS_NAME = "chia_full_node"
-PATH_TO_RUN_CHIA_SCRIPT = "/root/controller/chia_full_node.sh"
+PATH_TO_RUN_CHIA_SCRIPT = "/home/raspberry/controller/chia_full_node.sh"
 
 CONTROLLER_ENABLED = True
+ALL_DISKS_CONNECTED = True
 NETWORK_WORKS = True
 NODE_SYNCED = True
 CHIA_NODE_ENABLED = True
@@ -174,17 +178,36 @@ class Controller:
     # - end of mount disk impl
 
     def __check_mount_points(self):
+        global ALL_DISKS_CONNECTED
+        any_problems = False
+
         for disk_id, disk_params in self.disks_mapping.items():
             mount_point = disk_params["mount_point"]
-
+            files_cnt = 0
             if disk_params["is_mounted"]:
-                if len(os.listdir(mount_point)) == 0:
+                try:
+                    files_cnt = len(os.listdir(mount_point))
+                except:
+                    pass
+                if files_cnt == 0:
                     self.__umount_disk(disk_id, mount_point)
+                    any_problems = True
             else:
                 if len(os.listdir(mount_point)) != 0:
                     self.logger.controller_log("Cannot mount disk " + disk_id + " to " + mount_point + " because point point contains files.")
                 else:
                     self.__mount_disk(disk_id, mount_point)
+                    try:
+                        files_cnt = len(os.listdir(mount_point))
+                    except:
+                        pass
+                    if files_cnt == 0:
+                        any_problems = True
+
+        if not any_problems:
+            ALL_DISKS_CONNECTED = True
+        else:
+            ALL_DISKS_CONNECTED = False
 
     # - end of check mount points impl
 
@@ -216,10 +239,13 @@ class Controller:
                 NODE_SYNCED = True
                 self.logger.controller_log("Node is synchronized with blockchain.")
         except requests.ConnectionError as error:
+            NODE_SYNCED = False
             self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Connection error: " + str(error))
         except requests.HTTPError as error:
+            NODE_SYNCED = False
             self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Http error: " + str(error))
         except:
+            NODE_SYNCED = False
             self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. (Not known error)")
 
     # - end of check blockchain sync impl
@@ -232,17 +258,34 @@ class Controller:
                 CHIA_NODE_ENABLED = True
                 self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " process works again.")
         except:
-            if CHIA_NODE_ENABLED:
-                CHIA_NODE_ENABLED = False
-                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
-                try:
-                    output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT + " start", shell=True)
-                    self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " restarted. Output:\n" + str(output))
-                    time.sleep(30) #let's wait a little to let process be ready to work.
-                except subprocess.CalledProcessError as error:
-                    self.logger.controller_log("Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
+            CHIA_NODE_ENABLED = False
+            self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
+            try:
+                output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT + " start", shell=True)
+                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " restarted. Output:\n" + str(output))
+                time.sleep(30) #let's wait a little to let process be ready to work.
+            except subprocess.CalledProcessError as error:
+                self.logger.controller_log("Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
 
     # - end of is_process_alive
+
+    def __notify_if_problem(self):
+        global NETWORK_WORKS
+        global NODE_SYNCED
+        global CHIA_NODE_ENABLED
+        global ALL_DISKS_CONNECTED
+        global LED_CTRL
+
+        if not NETWORK_WORKS:
+            LED_CTRL.on()
+        elif not NODE_SYNCED:
+            LED_CTRL.on()
+        elif not CHIA_NODE_ENABLED:
+            LED_CTRL.on()
+        elif not ALL_DISKS_CONNECTED:
+            LED_CTRL.on()
+        else:
+            LED_CTRL.off()
 
     def run(self):
         global CONTROLLER_ENABLED
@@ -251,11 +294,12 @@ class Controller:
         while CONTROLLER_ENABLED:
             now = time.time()
             if now - last_time > BREAK_BETWEEN_JOBS_IN_SECONDS:
-                self.__is_process_alive()
                 self.__load_disks_mapping()
                 self.__check_mount_points()
+                self.__is_process_alive()
                 self.__check_network()
                 self.__check_blockchain_sync()
+                self.__notify_if_problem()
                 last_time = time.time()
             time.sleep(10)
 

@@ -9,5 +9,6 @@
 	{"name": "disk 18t lewa dol cztery", "mount_point": "/mnt/disk_18T_1", "disk_uuid": "72228725-d577-4928-8579-0a6d0b135749"},
 	{"name": "disk 4t lewa dol piec", "mount_point": "/mnt/disk_4T_1", "disk_uuid": "b90872f6-5801-4123-ba48-f847eb2cd7cb"},
 	{"name": "disk 8t zewnetrzny lewy", "mount_point": "/mnt/disk_8T_5", "disk_uuid": "1ea449aa-5908-4545-b9f0-a01f32224b15"},
-	{"name": "disk 8t zewnetrzny prawy", "mount_point": "/mnt/disk_8T_6", "disk_uuid": "e2a9e323-9f51-4240-996f-c7cf228e79c5"}
+	{"name": "disk 8t zewnetrzny prawy", "mount_point": "/mnt/disk_8T_6", "disk_uuid": "e2a9e323-9f51-4240-996f-c7cf228e79c5"},
+	{"name": "disk 18t po prawej", "mount_point": "/mnt/disk_18T_2", "disk_uuid": "5dbba87e-4408-4eaa-a70b-4efe6ed47077" }
 ]

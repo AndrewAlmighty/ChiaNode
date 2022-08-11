@@ -2,8 +2,11 @@
 Description=Chia node controller
 
 [Service]
+User=root
 Environment="CHIA_ROOT=dddddddddddddddddddddddddddddddddd"
-ExecStart=python /root/controller/node_controller.py 
+ExecStart=python /root/controller/node_controller.py
+Restart=always
+RestartSec=30
 
 [Install]
 WantedBy=default.target

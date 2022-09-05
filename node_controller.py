@@ -134,7 +134,7 @@ class Controller:
         self.disks_mapping[disk_id]["is_mounted"] = False
 
         if not os.path.isdir(mount_point):
-            self.logger.controller_log("Unmounting " + mount_point + " failed. Mount point doesn't exists")
+            self.logger.controller_log("[Error] Unmounting " + mount_point + " failed. Mount point doesn't exists")
             return
 
         mounted_filesystems = ""
@@ -142,7 +142,7 @@ class Controller:
         try:
             mounted_filesystems = str(findmnt(mount_point, "-J"))
         except:
-            self.logger.controller_log("No filesystems mounted on " + mount_point)
+            self.logger.controller_log("[Error] No filesystems mounted on " + mount_point)
             return
 
         try:
@@ -152,19 +152,19 @@ class Controller:
             for i in range(0, filesystems_mounted_count):
               umount(mount_point)
         except Exception as e:
-            self.logger.controller_log("Unmounting " + mount_point + " failed. Error: " + str(e))
+            self.logger.controller_log("[Error] Unmounting " + mount_point + " failed. Error: " + str(e))
 
     # - end of umount disk impl
 
     def __mount_disk(self, disk_id, mount_point):
         if not os.path.isdir(mount_point):
-            self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed. Mount point doesn't exists")
+            self.logger.controller_log("[Error] Mounting " + disk_id + " to " + mount_point + " failed. Mount point doesn't exists")
             return
             
         try:
             ls("/dev/disk/by-uuid/" + disk_id)
         except:
-            self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed. Disk is not connected!")
+            self.logger.controller_log("[Error] Mounting " + disk_id + " to " + mount_point + " failed. Disk is not connected!")
             return
 
         try:
@@ -174,13 +174,13 @@ class Controller:
             self.logger.controller_log("Mounted " + disk_id + ". Mount point: " + mount_point + ". Plots count: " + str(plots_count))
             time.sleep(3)
         except Exception as e:
-            self.logger.controller_log("Mounting " + disk_id + " to " + mount_point + " failed. Error: " + str(e))
+            self.logger.controller_log("[Error] Mounting " + disk_id + " to " + mount_point + " failed. Error: " + str(e))
 
     # - end of mount disk impl
 
     def __check_mount_points(self):
         global ALL_DISKS_CONNECTED
-        any_problems = False
+        connected_disks_count = 0
 
         for disk_id, disk_params in self.disks_mapping.items():
             mount_point = disk_params["mount_point"]
@@ -191,47 +191,43 @@ class Controller:
                 try:
                     files_cnt = len(os.listdir(mount_point))
                 except Exception as e:
-                    self.logger.controller_log("Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
-                    any_problems = True
+                    self.logger.controller_log("[Error] Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
                     continue
 
                 if files_cnt == 0:
                     self.__umount_disk(disk_id, mount_point)
                     disk_mounted = False
-                    any_problems = True
+                else:
+                    connected_disks_count += 1
+
 
             if not disk_mounted:
                 files_cnt = 0
                 try:
                     files_cnt = len(os.listdir(mount_point))
                 except Exception as e:
-                    self.logger.controller_log("Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
-                    any_problems = True
+                    self.logger.controller_log("[Error] Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
                     continue
   
                 if files_cnt != 0:
-                    self.logger.controller_log("Cannot mount disk " + disk_id + " to " + mount_point + " because mount point contains files.")
+                    self.logger.controller_log("[Error] Cannot mount disk " + disk_id + " to " + mount_point + " because mount point contains files.")
                 else:
                     self.__mount_disk(disk_id, mount_point)
                     try:
                         files_cnt = len(os.listdir(mount_point))
                     except Exception as e:
-                        self.logger.controller_log("Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
-                        any_problems = True
+                        self.logger.controller_log("[Error] Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
                         continue
 
-                    if files_cnt == 0:
-                        any_problems = True
+                    if files_cnt != 0:
+                        connected_disks_count += 1
 
-        if not any_problems:
+        if connected_disks_count == len(self.disks_mapping):
             if not ALL_DISKS_CONNECTED:
                 self.logger.controller_log("All disks are connected and mounted again!")
 
             ALL_DISKS_CONNECTED = True
         else:
-            if ALL_DISKS_CONNECTED:
-                self.logger.controller_log("Some disks are disconnected!")
-
             ALL_DISKS_CONNECTED = False
 
     # - end of check mount points impl
@@ -247,7 +243,7 @@ class Controller:
         except:
             if NETWORK_WORKS:
                 NETWORK_WORKS = False
-                self.logger.controller_log("Network connection has been lost.")
+                self.logger.controller_log("[Error] Network connection has been lost.")
     
     # - end of check network impl
 
@@ -258,7 +254,7 @@ class Controller:
             global NODE_SYNCED
 
             if not is_synced and NODE_SYNCED:
-                self.logger.controller_log("Node is not synchronized with blockchain.")
+                self.logger.controller_log("[Error] Node is not synchronized with blockchain.")
                 NODE_SYNCED = False
             elif is_synced and not NODE_SYNCED:
                 NODE_SYNCED = True
@@ -266,13 +262,13 @@ class Controller:
 
         except requests.ConnectionError as error:
             NODE_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Connection error: " + str(error))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if blockchain is synced. Connection error: " + str(error))
         except requests.HTTPError as error:
             NODE_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. Http error: " + str(error))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if blockchain is synced. Http error: " + str(error))
         except Exception as e:
             NODE_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if blockchain is synced. " + str(e))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if blockchain is synced. " + str(e))
 
     # - end of check blockchain sync impl
 
@@ -285,13 +281,13 @@ class Controller:
                 self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " process works again.")
         except:
             CHIA_NODE_ENABLED = False
-            self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
+            self.logger.controller_log("[Error] " + CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
             try:
                 output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT + " start", shell=True)
                 self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " restarted. Output:\n" + str(output))
                 time.sleep(30) #let's wait a little to let process be ready to work.
             except subprocess.CalledProcessError as error:
-                self.logger.controller_log("Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
+                self.logger.controller_log("[Error] Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
 
     # - end of is_process_alive
 
@@ -319,14 +315,14 @@ class Controller:
             global FARMER_PLOTS_NUMBER_GOOD
 
             if FARMER_SYNCED and harvester["syncing"] is not None:
-                self.logger.controller_log("Farmer is not synchronized with blockchain.")
+                self.logger.controller_log("[Error] Farmer is not synchronized with blockchain.")
                 FARMER_SYNCED = False
             elif not FARMER_SYNCED and harvester["syncing"] is None:
                 self.logger.controller_log("Farmer is synchronized with blockchain.")
                 FARMER_SYNCED = True
 
             if FARMER_PLOTS_NUMBER_GOOD and harvester["plots"] != FARMER_VALID_PLOTS_COUNT:
-                self.logger.controller_log("Farmer's plots count is not good. Plots count: " + str(harvester["plots"]) + ", expected: " + str(FARMER_VALID_PLOTS_COUNT))
+                self.logger.controller_log("[Error] Farmer's plots count is not good. Plots count: " + str(harvester["plots"]) + ", expected: " + str(FARMER_VALID_PLOTS_COUNT))
                 FARMER_PLOTS_NUMBER_GOOD = False
             elif not FARMER_PLOTS_NUMBER_GOOD and harvester["plots"] == FARMER_VALID_PLOTS_COUNT:
                 self.logger.controller_log("Farmer's plots count is good again.")
@@ -334,13 +330,13 @@ class Controller:
 
         except requests.ConnectionError as error:
             FARMER_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if farmer is synced. Connection error: " + str(error))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if farmer is synced. Connection error: " + str(error))
         except requests.HTTPError as error:
             FARMER_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if farmer is synced. Http error: " + str(error))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if farmer is synced. Http error: " + str(error))
         except Exception as e:
             FARMER_SYNCED = False
-            self.logger.controller_log("Cannot send request to full node to check if farmer is synced. " + str(e))
+            self.logger.controller_log("[Error] Cannot send request to full node to check if farmer is synced. " + str(e))
 
     # - check farmer plots count
 
@@ -352,10 +348,12 @@ class Controller:
             MOJO_TO_CHIA_DIVIDER = 1000000000000
             diff_in_chia = diff_in_mojos / MOJO_TO_CHIA_DIVIDER
             self.previous_confirmed_amount = current_confirmed_amount
-            self.logger.wallet_log("Wallet 1 amounts - confirmed: " + str(current_confirmed_amount) + " (diff: " + str(round(diff_in_chia, 4)) + " xch, " + str(diff_in_mojos) + " mojos), spendable: " + str(response["wallet_balance"]["spendable_balance"]))
+            self.logger.wallet_log("Wallet 1 - confirmed: " + str(current_confirmed_amount) + " (diff: " + str(round(diff_in_chia, 4)) + " xch, " + str(diff_in_mojos) + " mojos), spendable: " + str(response["wallet_balance"]["spendable_balance"]))
+            return True
 
         except Exception as e:
-            self.logger.wallet_log("Unable to get wallet's balance. " + str(e))
+            self.logger.wallet_log("[Error] Unable to get wallet's balance. " + str(e))
+            return False
 
     # - store wallet data
 
@@ -381,8 +379,8 @@ class Controller:
                     self.__check_farmer()
 
                 if NODE_SYNCED and now - wallet_last_time_check > WALLET_DATA_STORE_INTERVAL:
-                  self.__store_wallet_data()
-                  wallet_last_time_check = now
+                  if self.__store_wallet_data():
+                      wallet_last_time_check = now
 
                 last_time = time.time()
                 self.__notify_if_problem()

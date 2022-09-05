@@ -190,16 +190,16 @@ class Controller:
                 files_cnt = 0
                 try:
                     files_cnt = len(os.listdir(mount_point))
-                except Exception as e:
-                    self.logger.controller_log("[Error] Cannot check the content of mount point '" + mount_point + "'. Error: " + str(e))
-                    continue
+                    if files_cnt == 0:
+                        self.__umount_disk(disk_id, mount_point)
+                        disk_mounted = False
+                    else:
+                        connected_disks_count += 1
 
-                if files_cnt == 0:
+                except Exception as e:
+                    self.logger.controller_log("[Error] Cannot check the content of mount point '" + mount_point + "'. Unmouting disk. Error: " + str(e))
                     self.__umount_disk(disk_id, mount_point)
                     disk_mounted = False
-                else:
-                    connected_disks_count += 1
-
 
             if not disk_mounted:
                 files_cnt = 0

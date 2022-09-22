@@ -1,14 +1,14 @@
 [
-	{"name": "blockchain_data", "mount_point": "/mnt/CHIA_BLOCKCHAIN", "disk_uuid": "8d11c18a-9a36-40ef-b977-70c39f61bf01"},
-	{"name": "disk 6tb prawa dol pierwszy", "mount_point": "/mnt/disk_6T_1", "disk_uuid": "511db867-8a1c-4244-955b-4190388a2604"},
-	{"name": "disk 6tb prawa dol drugi", "mount_point": "/mnt/disk_6T_2", "disk_uuid": "094f1a48-1e78-40f0-ae21-a896de8e6391"},
-	{"name": "disk 8tb prawa dol cztery", "mount_point": "/mnt/disk_8T_1", "disk_uuid": "b5ba2b63-2d9a-475c-bd42-bb7deedccdbf"},
-	{"name": "disk 8tb lewa dol jeden", "mount_point": "/mnt/disk_8T_2", "disk_uuid": "67031a23-37b0-4cd9-b5be-24c38de05ea3"},
-	{"name": "disk 8tb lewa dol dwa", "mount_point": "/mnt/disk_8T_3", "disk_uuid": "d4fd24a9-391f-4172-8d56-b408ac471f5c"},
-	{"name": "disk 8tb lewa dol trzy", "mount_point": "/mnt/disk_8T_4", "disk_uuid": "ecc95fea-efe6-4eb3-92ef-98fb87c45608"},
-	{"name": "disk 18t lewa dol cztery", "mount_point": "/mnt/disk_18T_1", "disk_uuid": "72228725-d577-4928-8579-0a6d0b135749"},
-	{"name": "disk 4t lewa dol piec", "mount_point": "/mnt/disk_4T_1", "disk_uuid": "b90872f6-5801-4123-ba48-f847eb2cd7cb"},
-	{"name": "disk 8t zewnetrzny lewy", "mount_point": "/mnt/disk_8T_5", "disk_uuid": "1ea449aa-5908-4545-b9f0-a01f32224b15"},
-	{"name": "disk 8t zewnetrzny prawy", "mount_point": "/mnt/disk_8T_6", "disk_uuid": "e2a9e323-9f51-4240-996f-c7cf228e79c5"},
-	{"name": "disk 18t po prawej", "mount_point": "/mnt/disk_18T_2", "disk_uuid": "5dbba87e-4408-4eaa-a70b-4efe6ed47077" }
+	{"name": "blockchain_data", "mount_point": "/mnt/CHIA_BLOCKCHAIN", "disk_uuid": "8d11c18a-9a36-40ef-b977-70c39f61bf01", "is_mandatory": true},
+	{"name": "disk 6tb prawa dol pierwszy", "mount_point": "/mnt/disk_6T_1", "disk_uuid": "511db867-8a1c-4244-955b-4190388a2604", "is_mandatory": false},
+	{"name": "disk 6tb prawa dol drugi", "mount_point": "/mnt/disk_6T_2", "disk_uuid": "094f1a48-1e78-40f0-ae21-a896de8e6391", "is_mandatory": false},
+	{"name": "disk 8tb prawa dol cztery", "mount_point": "/mnt/disk_8T_1", "disk_uuid": "b5ba2b63-2d9a-475c-bd42-bb7deedccdbf", "is_mandatory": false},
+	{"name": "disk 8tb lewa dol jeden", "mount_point": "/mnt/disk_8T_2", "disk_uuid": "67031a23-37b0-4cd9-b5be-24c38de05ea3", "is_mandatory": false},
+	{"name": "disk 8tb lewa dol dwa", "mount_point": "/mnt/disk_8T_3", "disk_uuid": "d4fd24a9-391f-4172-8d56-b408ac471f5c", "is_mandatory": false},
+	{"name": "disk 8tb lewa dol trzy", "mount_point": "/mnt/disk_8T_4", "disk_uuid": "ecc95fea-efe6-4eb3-92ef-98fb87c45608", "is_mandatory": false},
+	{"name": "disk 18t lewa dol cztery", "mount_point": "/mnt/disk_18T_1", "disk_uuid": "72228725-d577-4928-8579-0a6d0b135749", "is_mandatory": false},
+	{"name": "disk 4t lewa dol piec", "mount_point": "/mnt/disk_4T_1", "disk_uuid": "b90872f6-5801-4123-ba48-f847eb2cd7cb", "is_mandatory": false},
+	{"name": "disk 8t zewnetrzny lewy", "mount_point": "/mnt/disk_8T_5", "disk_uuid": "1ea449aa-5908-4545-b9f0-a01f32224b15", "is_mandatory": false},
+	{"name": "disk 8t zewnetrzny prawy", "mount_point": "/mnt/disk_8T_6", "disk_uuid": "e2a9e323-9f51-4240-996f-c7cf228e79c5", "is_mandatory": false},
+	{"name": "disk 18t po prawej", "mount_point": "/mnt/disk_18T_2", "disk_uuid": "5dbba87e-4408-4eaa-a70b-4efe6ed47077", "is_mandatory": false }
 ]

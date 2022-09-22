@@ -17,6 +17,7 @@ FARMER_VALID_PLOTS_COUNT = 862
 LED_CTRL = LED(17)
 
 BREAK_BETWEEN_JOBS_IN_SECONDS = 180
+STARTUP_HOLD_TIME_IN_SECONDS = 30
 WALLET_DATA_STORE_INTERVAL = 86400 # once per day
 
 WALLET_LOG_PATH="/home/raspberry/wallet.log"
@@ -363,6 +364,9 @@ class Controller:
         global WALLET_DATA_STORE_INTERVAL
         global NODE_SYNCED
         global CHIA_NODE_ENABLED
+
+        time.sleep(STARTUP_HOLD_TIME_IN_SECONDS)
+        self.logger.controller_log("Startup hold period passed.")
 
         last_time = 0
         wallet_last_time_check = 0

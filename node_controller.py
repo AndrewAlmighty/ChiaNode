@@ -2,12 +2,14 @@ from datetime import datetime
 from gpiozero import LED
 from sh import findmnt, ls, mount, umount, pgrep
 from urllib.request import urlopen
+from email.mime.text import MIMEText
 
 import glob
 import json
 import os
 import requests
 import signal
+import smtplib
 import subprocess
 import time
 
@@ -19,6 +21,7 @@ LED_CTRL = LED(17)
 BREAK_BETWEEN_JOBS_IN_SECONDS = 180
 STARTUP_HOLD_TIME_IN_SECONDS = 30
 WALLET_DATA_STORE_INTERVAL = 86400 # once per day
+EMAIL_SEND_INTERVAL = 86400 # once per day
 
 WALLET_LOG_PATH="/home/raspberry/wallet.log"
 
@@ -64,21 +67,38 @@ class Logger:
     def __init__(self):
         self.wallet_log_path = WALLET_LOG_PATH
         self.controller_log_path = CONTROLLER_LOG_PATH
+        self.wallet_logs_buffer = ""
+        self.ctrl_logs_buffer = ""
         self.wallet_log("Controller started work")
         self.controller_log("Controller started work")
 
     def __log(self, file, log):
         log_file = open(file, "a")
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        log_file.write("[" + dt_string + "]: " + log + "\n")
+        log_file.write(log)
         log_file.close()
 
     def wallet_log(self, log):
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        log = '[' + dt_string + "]: " + log + '\n' 
         self.__log(self.wallet_log_path, log)
+        self.wallet_logs_buffer += log
 
     def controller_log(self, log):
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        log = '[' + dt_string + "]: " + log + '\n' 
         self.__log(self.controller_log_path, log)
+        self.ctrl_logs_buffer += log + '\n'
+
+    def get_logs_from_buffer(self):
+        logs = "Wallet logs:\n" + self.wallet_logs_buffer + "\n"
+        logs += "Controller logs:\n" + self.ctrl_logs_buffer
+        return logs
+
+    def clear_logs_buffers(self):
+        self.wallet_logs_buffer = ""
+        self.ctrl_logs_buffer = ""
 
 # --- END OF LOGGER
 
@@ -105,7 +125,7 @@ class Controller:
             loaded_disk_mount_point = loaded_disk_json["mount_point"]
             loaded_disk_is_mandatory = loaded_disk_json["is_mandatory"]
 
-            loaded_disk_ids.append(disk_id)
+            loaded_disk_ids.append(loaded_disk_id)
 
             if loaded_disk_id not in self.disks_mapping.keys():
                 loaded_disk_params = { "mount_point": loaded_disk_mount_point, "is_mounted": False, "is_mandatory": loaded_disk_is_mandatory }
@@ -409,6 +429,33 @@ class Controller:
 
     # - store wallet data
 
+    def __send_email(self):
+        try:
+            f = open("/home/raspberry/controller/emailpass.txt", "r")
+            password = f.read()
+            password = password[:len(password) - 1]
+            f.close()
+            sender = "koparaumalca@int.pl"
+            recipients = ["xaidianx@gmail.com", "doew123@gmail.com"]
+            body = "Logi\n"
+            body += self.logger.get_logs_from_buffer()
+            msg = MIMEText(body)
+            msg['Subject'] = "Raport dobowy z kopary"
+            msg['From'] = sender
+            msg['To'] = ', '.join(recipients)
+            smtp_server = smtplib.SMTP_SSL('poczta.int.pl', 465)
+            smtp_server.login(sender, password)
+            smtp_server.sendmail(sender, recipients, msg.as_string())
+            smtp_server.quit()
+            self.logger.controller_log("Email with report has been sent.")
+            self.logger.clear_logs_buffers()
+            return True
+        except Exception as e:
+            self.logger.controller_log("[Error] Unable to send email: " + str(e))
+            return False
+
+    # - send email
+
     def run(self):
         global CONTROLLER_ENABLED
         global BREAK_BETWEEN_JOBS_IN_SECONDS
@@ -416,12 +463,14 @@ class Controller:
         global NODE_SYNCED
         global CHIA_NODE_ENABLED
         global MANDATORY_DISKS_MOUNTED
+        global EMAIL_SEND_INTERVAL
 
         time.sleep(STARTUP_HOLD_TIME_IN_SECONDS)
         self.logger.controller_log("Startup hold period passed.")
 
         last_time = 0
         wallet_last_time_check = 0
+        email_last_time_send = 0
         while CONTROLLER_ENABLED:
             now = time.time()
             if now - last_time > BREAK_BETWEEN_JOBS_IN_SECONDS:
@@ -441,6 +490,10 @@ class Controller:
                 if NODE_SYNCED and now - wallet_last_time_check > WALLET_DATA_STORE_INTERVAL:
                   if self.__store_wallet_data():
                       wallet_last_time_check = now
+
+                if NETWORK_WORKS and now - email_last_time_send > EMAIL_SEND_INTERVAL:
+                  if self.__send_email():
+                    email_last_time_send = now
 
                 last_time = time.time()
                 self.__notify_if_problem()

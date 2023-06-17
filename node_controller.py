@@ -18,14 +18,17 @@ FARMER_VALID_PLOTS_COUNT = 862
 
 LED_CTRL = LED(17)
 
-BREAK_BETWEEN_JOBS_IN_SECONDS = 180
+BREAK_BETWEEN_JOBS_IN_SECONDS = 60
 STARTUP_HOLD_TIME_IN_SECONDS = 30
 WALLET_DATA_STORE_INTERVAL = 86400 # once per day
 EMAIL_SEND_INTERVAL = 86400 # once per day
 
 WALLET_LOG_PATH="/home/raspberry/wallet.log"
-
 CONTROLLER_LOG_PATH="/home/raspberry/controller.log"
+EMAIL_BUFFOR_PATH="/home/raspberry/.email_buffor.log"
+
+EMAIL_SENDING_ERROR = False
+
 DISKS_JSON_FILE_PATH = "/home/raspberry/controller/disks.json"
 
 RPC_REQUEST_HEADERS = {'Content-Type': 'application/json'}
@@ -35,7 +38,7 @@ WALLET_BALANCE_URL = "https://localhost:9256/get_wallet_balance"
 CHIA_ROOT_DIR = os.getenv("CHIA_ROOT")  # shouldn't have '/' in the end.
 FULL_NODE_CERT = (CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.crt', CHIA_ROOT_DIR + '/config/ssl/full_node/private_full_node.key')
 
-CHIA_NODE_PROCESS_NAME = "chia_full_node"
+CHIA_PROCESSES = ["chia_full_node", "chia_farmer", "chia_harvester", "chia_wallet"]
 PATH_TO_RUN_CHIA_SCRIPT = "/home/raspberry/controller/chia_full_node.sh"
 
 MANDATORY_DISKS_MOUNTED = False
@@ -67,10 +70,15 @@ class Logger:
     def __init__(self):
         self.wallet_log_path = WALLET_LOG_PATH
         self.controller_log_path = CONTROLLER_LOG_PATH
-        self.wallet_logs_buffer = ""
-        self.ctrl_logs_buffer = ""
+        self.email_buffor_path = EMAIL_BUFFOR_PATH
         self.wallet_log("Controller started work")
         self.controller_log("Controller started work")
+
+    def __add_time_to_log(self, log):
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        log = '[' + dt_string + "]: " + log + '\n'
+        return log
 
     def __log(self, file, log):
         log_file = open(file, "a")
@@ -78,27 +86,13 @@ class Logger:
         log_file.close()
 
     def wallet_log(self, log):
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        log = '[' + dt_string + "]: " + log + '\n' 
+        log = self.__add_time_to_log(log)
         self.__log(self.wallet_log_path, log)
-        self.wallet_logs_buffer += log
 
     def controller_log(self, log):
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        log = '[' + dt_string + "]: " + log + '\n' 
+        log = self.__add_time_to_log(log)
         self.__log(self.controller_log_path, log)
-        self.ctrl_logs_buffer += log + '\n'
-
-    def get_logs_from_buffer(self):
-        logs = "Wallet logs:\n" + self.wallet_logs_buffer + "\n"
-        logs += "Controller logs:\n" + self.ctrl_logs_buffer
-        return logs
-
-    def clear_logs_buffers(self):
-        self.wallet_logs_buffer = ""
-        self.ctrl_logs_buffer = ""
+        self.__log(self.email_buffor_path, log)
 
 # --- END OF LOGGER
 
@@ -337,11 +331,11 @@ class Controller:
         try:
             if turn_on:
                 output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT + " start", shell=True)
-                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " restarted. Output:\n" + str(output))
-                time.sleep(30) #let's wait a little to let process be ready to work.
+                self.logger.controller_log("Chia processes restarted. Output:\n" + str(output))
+                time.sleep(20) #let's wait a little to let process be ready to work.
             else:
                 output = subprocess.check_output(PATH_TO_RUN_CHIA_SCRIPT, shell=True)
-                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " stopped. Output:\n" + str(output))
+                self.logger.controller_log("Chia processes stopped. Output:\n" + str(output))
                 CHIA_NODE_ENABLED = False
         except subprocess.CalledProcessError as error:
             self.logger.controller_log("[Error] Failed to run script: " + PATH_TO_RUN_CHIA_SCRIPT + ". Error: " + str(error))
@@ -350,15 +344,18 @@ class Controller:
 
     def __is_process_alive(self):
         global CHIA_NODE_ENABLED
-        try:
-            pgrep(CHIA_NODE_PROCESS_NAME)
-            if not CHIA_NODE_ENABLED:
-                CHIA_NODE_ENABLED = True
-                self.logger.controller_log(CHIA_NODE_PROCESS_NAME + " process works again.")
-        except:
-            CHIA_NODE_ENABLED = False
-            self.logger.controller_log("[Error] " + CHIA_NODE_PROCESS_NAME + " stopped working. Restarting ...")
-            self.__chia_node_action(True)
+        for process_name in CHIA_PROCESSES:
+            try:
+                pgrep(process_name)
+                if not CHIA_NODE_ENABLED:
+                    CHIA_NODE_ENABLED = True
+                    self.logger.controller_log(process_name + " process works again.")
+                    break
+            except:
+                CHIA_NODE_ENABLED = False
+                self.logger.controller_log("[Error] " + process_name + " stopped working. Restarting chia processes ...")
+                self.__chia_node_action(True)
+                break
 
     # - end of is_process_alive
 
@@ -430,28 +427,42 @@ class Controller:
     # - store wallet data
 
     def __send_email(self):
+        global EMAIL_SENDING_ERROR
+
         try:
             f = open("/home/raspberry/controller/emailpass.txt", "r")
             password = f.read()
             password = password[:len(password) - 1]
             f.close()
-            sender = "koparaumalca@int.pl"
+            sender = "grzegorzprzybyszewski358@gmail.com"
             recipients = ["xaidianx@gmail.com", "doew123@gmail.com"]
-            body = "Logi\n"
-            body += self.logger.get_logs_from_buffer()
+
+            body = ""
+
+            with open(WALLET_LOG_PATH, "r") as file:
+                body += file.readlines()[-1] + "\n\n"
+            
+            file_email_buffer = open(EMAIL_BUFFOR_PATH, 'r+')
+            body += file_email_buffer.read()
             msg = MIMEText(body)
             msg['Subject'] = "Raport dobowy z kopary"
             msg['From'] = sender
             msg['To'] = ', '.join(recipients)
-            smtp_server = smtplib.SMTP_SSL('poczta.int.pl', 465)
-            smtp_server.login(sender, password)
-            smtp_server.sendmail(sender, recipients, msg.as_string())
-            smtp_server.quit()
+            smtp_connection = smtplib.SMTP('smtp.gmail.com', 587)
+            smtp_connection.starttls()
+            smtp_connection.login(sender, password)
+            smtp_connection.sendmail(sender, recipients, msg.as_string())
+            smtp_connection.quit()
             self.logger.controller_log("Email with report has been sent.")
-            self.logger.clear_logs_buffers()
+            file_email_buffer.truncate(0)
+            file_email_buffer.close()
+            EMAIL_SENDING_ERROR = False
             return True
         except Exception as e:
-            self.logger.controller_log("[Error] Unable to send email: " + str(e))
+            if EMAIL_SENDING_ERROR == False:
+                self.logger.controller_log("[Error] Unable to send email: " + str(e))
+
+            EMAIL_SENDING_ERROR = True
             return False
 
     # - send email
@@ -487,20 +498,20 @@ class Controller:
                     self.__check_blockchain_sync()
                     self.__check_farmer()
 
-                if NODE_SYNCED and now - wallet_last_time_check > WALLET_DATA_STORE_INTERVAL:
+                if CHIA_NODE_ENABLED and NODE_SYNCED and now - wallet_last_time_check > WALLET_DATA_STORE_INTERVAL:
                   if self.__store_wallet_data():
                       wallet_last_time_check = now
 
                 if NETWORK_WORKS and now - email_last_time_send > EMAIL_SEND_INTERVAL:
-                  if self.__send_email():
-                    email_last_time_send = now
+                    if self.__send_email():
+                        email_last_time_send = now
 
                 last_time = time.time()
                 self.__notify_if_problem()
 
             time.sleep(10)
 
-        self.logger.controller_log("Stopping " + CHIA_NODE_PROCESS_NAME + " ...")
+        self.logger.controller_log("Stopping chia processes ...")
         self.__chia_node_action(False)
         self.logger.controller_log("Controller is stopped with sigint or sigterm")
         self.logger.wallet_log("Controller is stopped with sigint or sigterm")
